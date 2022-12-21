@@ -1,0 +1,14 @@
+.qsys_edit
+db
+incremental_db
+output_files
+simulation
+adder_tb.v.bak
+adder.v.bak
+FP_ALU_nativelink_simulation
+FP_ALU.qpf
+FP_ALU.qsf
+FP_ALU.qws
+shift_register_tb.v.bak
+shift_register.v.bak
+FP_ALU_nativelink_simulation.rpt
