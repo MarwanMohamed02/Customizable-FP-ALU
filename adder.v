@@ -3,7 +3,7 @@
 module adder
            #(parameter Mantissa_Size = 23, parameter Exponent_Size = 8, parameter N = Mantissa_Size + Exponent_Size)
 
-            (   output [N:0] result, output done, output overflow,
+            (   output [N:0] result, output done, output zero_flag, output overflow,
                 input clk, enable, load, 
                 input [N:0] A, B            );
 
@@ -16,8 +16,7 @@ module adder
     // for faster and easier computations the following registers will be used
     
     // larger -> stores the number with the greatest magnitude 
-    // smaller -> stores the number with the smallest magnitude
-    reg [Mantissa_Size:0] smaller, larger;
+    reg [Mantissa_Size:0] larger;
 
     // stores the diff. bet. the exponents (if they're not equal)
     reg [Exponent_Size-1:0] exponent_diff;
@@ -26,30 +25,40 @@ module adder
     reg shift_load;
 
     // direction of shifting (0 -> shift right #exponent_diff times, 1 -> normalize input)
-    reg direction;
+    reg shifting_direction;
     
+    // input of the shifter
+    reg  [Mantissa_Size:0]   shifter_input_mantissa;
+    // reg  [Exponent_Size-1:0] shifter_input_exponent;
+
     // output of the shifter
-    wire [Mantissa_Size:0] shifted_data;
+    wire [Mantissa_Size:0]   shifted_mantissa;
+    wire [Exponent_Size-1:0] shifted_exponent;
 	wire done_shifting;
 
     // flags for the adder itself
     reg done_adding;
+    reg done_normalizing;
+    reg zero;
     reg Cout;
     reg overflow_flag;
 
 
 
     shift_register #(.Mantissa_Size(Mantissa_Size), .Exponent_Size(Exponent_Size)) shift(
-                    .shifted(shifted_data),
+                    .shiftedMantissa(shifted_mantissa),
+                    .shiftedExponent(shifted_exponent),
                     .done(done_shifting),
                     .clk(clk),
                     .enable(enable),
                     .load(shift_load),
-                    .unshifted(smaller),
-                    .direction(direction),
+                    .mantissa(shifter_input_mantissa),
+                    .exponent(ER),
+                    .direction(shifting_direction),
                     .no_of_shifts(exponent_diff)
                 );
 
+    
     always @ (posedge clk or posedge load or posedge enable) begin
         
         if (enable) begin
@@ -67,51 +76,76 @@ module adder
                 // if numbers have different exponents put the diff in exponent_diff for shifting
                 // also put the greater exponent  in ER (ER maybe changed later but we initialize it like this then check later if shifting will be needed)
                 if (EA != EB) 
-                    {SR, ER, larger, smaller, exponent_diff} <= EA > EB ? {SA, EA, MA, MB, EA-EB} : {SB, EB, MB, MA, EB-EA}; 
+                    {SR, ER, larger, shifter_input_mantissa, exponent_diff} <= EA > EB ? {SA, EA, MA, MB, EA-EB} : {SB, EB, MB, MA, EB-EA}; 
     
                 // otherwise perform addition right away
                 else begin
-                    { SR, larger, smaller } <= MA >= MB ? {SA, MA, MB} : {SB, MB, MA}; 
-                    ER <= EA;
+                    { SR, larger, shifter_input_mantissa } <= MA >= MB ? {SA, MA, MB} : {SB, MB, MA}; 
+                    ER <= EA;  // since they are equal we can assign EA or EB to ER
                     exponent_diff <= 0;
                 end
                 
                 // tell shifter to start loading 
-                direction <= 1'b1;
-                shift_load <= 1'b1;
+                shifting_direction <= 1;
+                shift_load <= 1;
 
                 // initialize adder flags
-                done_adding <= 1'b0;
+                done_adding <= 0;
                 overflow_flag <= 0;
+                done_normalizing <= 0;
             end
             // to prevent the result from changing overtime, we check if we've already finished addition before entering the addition block
-            else if (!done_adding) begin
+            else begin
                 // tell the shifter to stop loading & start executing
-                shift_load <= 1'b0;
-
+                shift_load <= 0;
+                
                 // start addition when shifting is complete
-                if (done_shifting) begin
+                if (!done_adding && done_shifting) begin
 
                     // adding/subtracting and checking if there is a carry  
-                    {Cout, MR} = SA != SB ? larger - shifted_data : larger + shifted_data;
+                    {Cout, MR} = SA != SB ? larger - shifted_mantissa : larger + shifted_mantissa;
 
+                    if (MR == 0) begin
+                        zero <= 1;
+                        SR <= 0;
+                        MR = 0;
+                        ER <= 0;
+                    end
+        
                     // if there is carry shift the mantissa to the right and increment the exponent
-                    if (Cout == 1) begin
-                        MR <= {Cout, MR[Mantissa_Size:1]};
+                    else if (Cout == 1) begin
+                        MR = {Cout, MR[Mantissa_Size:1]};
                         {overflow_flag, ER} <= ER + 1;      // checking if overflow ocurred 
                     end
-                      
-                    // finally, we turn on the done flag to indicate to any module that will use the adder that it has finished its calculations
+
+
+                    // Now, we've finished adding and should start normalizing
+                    
+                    // So, we set the shift direction=0 to shift left
+                    shifting_direction <= 0;
+                    shifter_input_mantissa = MR;
+                    shift_load <= 1;    
+
+                    // We then indicate that we're done adding so we don't enter this block again   
                     done_adding <= 1'b1;
+                    done_normalizing <= 0;
+
                 end
+
+                // if normalization is done, then the adder has finished its job and done flag will be set
+                else if (done_shifting)
+                    done_normalizing <= 1;
+
             end
         end
 
     end
 
+
     // assigning the module variables to the outputs
-    assign result = {SR, ER, MR[Mantissa_Size-1:0]};
-    assign done = done_adding;
+    assign result = {SR, shifted_exponent, shifted_mantissa[Mantissa_Size-1:0]};
+    assign done = done_normalizing;
     assign overflow = overflow_flag;
+    assign zero_flag = zero;
 
 endmodule 
