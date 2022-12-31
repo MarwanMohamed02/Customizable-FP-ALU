@@ -3,9 +3,11 @@
 module adder
            #(parameter Mantissa_Size = 23, parameter Exponent_Size = 8, parameter N = Mantissa_Size + Exponent_Size)
 
-            (   output [N:0] result, output done, output zero_flag, output overflow,
+            (   output done, zero_flag, overflow, underflow, NAN,
+                output [N:0] result, 
                 input clk, enable, load, 
                 input [N:0] A, B            );
+					 
 
     // for storing each individual part of the encoded floating point number
     // EA -> exponent of A, MR -> mantissa of Result... and so on
@@ -42,6 +44,8 @@ module adder
     reg zero;
     reg Cout;
     reg overflow_flag;
+    reg NAN_flag;
+ 
 
 
 
@@ -49,6 +53,7 @@ module adder
                     .shiftedMantissa(shifted_mantissa),
                     .shiftedExponent(shifted_exponent),
                     .done(done_shifting),
+                    .underflow(underflow),
                     .clk(clk),
                     .enable(enable),
                     .load(shift_load),
@@ -73,34 +78,59 @@ module adder
                 MA = {1'b1,A[Mantissa_Size-1:0]};
                 MB = {1'b1,B[Mantissa_Size-1:0]};
 
-                // if numbers have different exponents put the diff in exponent_diff for shifting
-                // also put the greater exponent  in ER (ER maybe changed later but we initialize it like this then check later if shifting will be needed)
-                if (EA != EB) 
-                    {SR, ER, larger, shifter_input_mantissa, exponent_diff} <= EA > EB ? {SA, EA, MA, MB, EA-EB} : {SB, EB, MB, MA, EB-EA}; 
-    
-                // otherwise perform addition right away
-                else begin
-                    { SR, larger, shifter_input_mantissa } <= MA >= MB ? {SA, MA, MB} : {SB, MB, MA}; 
-                    ER <= EA;  // since they are equal we can assign EA or EB to ER
+
+                // checking for NAN && infinities 
+                if ((EA == {(Exponent_Size){1'b1}}) || (EB == {(Exponent_Size){1'b1}})) begin
+
+                    if (MA[0] === 1'bX || MB[0] === 1'bX) begin
+                        NAN_flag <= 1;
+                        shifter_input_mantissa <= {2'b11, { (Mantissa_Size-1){1'bx} }};
+                    end
+
+                    else  
+                        overflow_flag <= 1;
+                    
+
                     exponent_diff <= 0;
+                    ER = {(Exponent_Size){1'b1}};
+                    done_adding <= 1;
                 end
                 
+
+                // if numbers have different exponents put the diff in exponent_diff for shifting
+                // also put the greater exponent  in ER (ER maybe changed later but we initialize it like this then check later if shifting will be needed)
+                else begin
+                    if (EA != EB)  begin
+                    {   SR, ER, larger, shifter_input_mantissa, exponent_diff} = EA > EB ? {SA, EA, MA, MB, EA-EB} : {SB, EB, MB, MA, EB-EA}; 
+                    end
+                    // otherwise perform addition right away
+                    else begin
+                        { SR, larger, shifter_input_mantissa } <= MA >= MB ? {SA, MA, MB} : {SB, MB, MA}; 
+                        ER = EA;  // since they are equal we can assign EA or EB to ER
+                        exponent_diff <= 0;
+                    end
+
+                    // initialize adder flags
+                    done_adding <= 0;
+                    overflow_flag <= 0;
+                    NAN_flag <= 0;
+                    done_normalizing <= 0;
+                end
                 // tell shifter to start loading 
                 shifting_direction <= 1;
                 shift_load <= 1;
 
-                // initialize adder flags
-                done_adding <= 0;
-                overflow_flag <= 0;
-                done_normalizing <= 0;
+                zero <= 0;
+                
             end
+            
             // to prevent the result from changing overtime, we check if we've already finished addition before entering the addition block
             else begin
                 // tell the shifter to stop loading & start executing
                 shift_load <= 0;
                 
                 // start addition when shifting is complete
-                if (!done_adding && done_shifting) begin
+                if (!done_adding && done_shifting && !overflow && !NAN) begin
 
                     // adding/subtracting and checking if there is a carry  
                     {Cout, MR} = SA != SB ? larger - shifted_mantissa : larger + shifted_mantissa;
@@ -109,15 +139,18 @@ module adder
                         zero <= 1;
                         SR <= 0;
                         MR = 0;
-                        ER <= 0;
+                        ER = 0;
                     end
         
                     // if there is carry shift the mantissa to the right and increment the exponent
                     else if (Cout == 1) begin
                         MR = {Cout, MR[Mantissa_Size:1]};
-                        {overflow_flag, ER} <= ER + 1;      // checking if overflow ocurred 
+                        ER = ER + 1;      // checking if overflow ocurred 
                     end
 
+                    if (ER == {(Exponent_Size){1'b1}}) 
+                        overflow_flag = 1;
+                        
 
                     // Now, we've finished adding and should start normalizing
                     
@@ -133,19 +166,19 @@ module adder
                 end
 
                 // if normalization is done, then the adder has finished its job and done flag will be set
-                else if (done_shifting)
+                else if (done_shifting) 
                     done_normalizing <= 1;
 
             end
         end
-
     end
 
 
     // assigning the module variables to the outputs
-    assign result = {SR, shifted_exponent, shifted_mantissa[Mantissa_Size-1:0]};
+    assign result = overflow? {1'b0, {(Exponent_Size){1'b1}}, {(Mantissa_Size){1'b0}}} : {SR, shifted_exponent, shifted_mantissa[Mantissa_Size-1:0]};
     assign done = done_normalizing;
     assign overflow = overflow_flag;
-    assign zero_flag = zero;
+    assign zero_flag = underflow? 1 : zero;
+    assign NAN = NAN_flag;
 
 endmodule 

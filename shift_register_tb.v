@@ -54,8 +54,8 @@ module shift_register_tb();
 		#(T)  	load = 1'b0;
 
 		#(6*T)
-				if (output_mantissa == 24'b0000_0011_0111_0001_0101_0111 && output_exponent == exponent)
-					$display("Test 1 Passed!!  %b", done);
+				if (output_mantissa == 24'b0000_0011_0111_0001_0101_0111 && output_exponent == exponent && done)
+					$display("Test 1 Passed!!");
 				else
 					$display("Test 1 Failed!");
 
@@ -75,7 +75,24 @@ module shift_register_tb();
 					$display("Test 2 Failed! \n got:    \t m: %b   e: %b\n correct:\t m: %b   e: %b"
 					, output_mantissa, output_exponent, 
 					24'b1100_0101_0101_1100_1100_0000, 8'b0000_0001);
-	
+
+
+
+		// testing underflow
+		#(T) 	mantissa = 24'b0000_0110_0010_1010_1110_0110;
+				exponent = 8'b0000_0010;
+				direction = 1'b0;	
+				load = 1'b1;
+
+		#(2*T)  	load = 1'b0;
+
+		#(6*T) 	
+				if (output_mantissa == 0 && output_exponent == 0 && done)
+					$display("Test 3 Passed!!");
+				else
+					$display("Test 2 Failed! \n got:    \t m: %b   e: %b\n correct:\t m: %b   e: %b"
+					, output_mantissa, output_exponent, 
+					24'b1100_0101_0101_1100_1100_0000, 8'b0000_0001);
 		
 	
 	end
