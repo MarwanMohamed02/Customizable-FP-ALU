@@ -77,6 +77,13 @@ module fpu
 
         always @(posedge clk or posedge load) begin
 
+            if (load) begin
+                if (op == subtraction)
+                    B[N-1] = ~B[N-1];
+            end
+
+            else begin
+
                 case (op) 
 
                      (addition || subtraction):
@@ -105,6 +112,8 @@ module fpu
 
                     
                 endcase
+
+            end
             
         end
 
