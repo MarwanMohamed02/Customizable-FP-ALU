@@ -135,17 +135,17 @@ module adder
                     // adding/subtracting and checking if there is a carry  
                     {Cout, MR} = SA != SB ? larger - shifted_mantissa : larger + shifted_mantissa;
 
-                    if (MR == 0) begin
+                    if (Cout == 1) begin
+                        MR = {Cout, MR[Mantissa_Size:1]};
+                        ER = ER + 1;      // checking if overflow ocurred 
+                    end                     
+        
+                    // if there is carry shift the mantissa to the right and increment the exponent
+                    else if (MR == 0) begin
                         zero <= 1;
                         SR <= 0;
                         MR = 0;
                         ER = 0;
-                    end
-        
-                    // if there is carry shift the mantissa to the right and increment the exponent
-                    else if (Cout == 1) begin
-                        MR = {Cout, MR[Mantissa_Size:1]};
-                        ER = ER + 1;      // checking if overflow ocurred 
                     end
 
                     if (ER == {(Exponent_Size){1'b1}}) 

@@ -49,6 +49,26 @@ module adder_tb();
 
         // This testbench will have 7 tests that are mostly edge cases and they are the following:
       
+       // 0)  Same exponent addition
+       #(T)
+            A = 32'b0_____1000_0000_____00000000000000000000000;
+            B = 32'b0_____1000_0000_____00000000000000000000000;
+
+            load = 1'b1;
+	
+		#(T)    
+            load = 1'b0;
+
+        #(10*T)
+            if (result == 32'b0__1000_0001__000_0000_0000_0000_0000_0000)
+		      $display("Normal0 Test Passed!!\n zf: %b  uf: %b  df: %b NAN: %b", zero_flag, underflow, done, NAN_flag );
+            else begin
+		      SR = result[N];
+              ER = result[N-1:N-Exponent_Size];
+              MR = result[Mantissa_Size-1:0];
+              $display("Normal0 Test Failed!\noverflow: %b  \ngot:         sign:   %b  exp:    %b  m:  %b         \ncorrect:     sign:   %b  exp:    %b  m:  %b\n zf: %b  uf: %b  df: %b NAN: %b", 
+              overflow,SR, ER, MR, 1'b0, 8'b1000_0001, 23'b000_0000_0000_0000_0000_0000, zero_flag, underflow, done, NAN_flag );
+            end
 		  
 
         // 1) Normal Addition
